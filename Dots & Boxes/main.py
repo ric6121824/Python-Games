@@ -1,12 +1,12 @@
-import math
 import pygame
+
+from rules import Direction, GameState, MoveResult
+
 
 SCREEN = WIDTH, HEIGHT = 300, 300
 CELLSIZE = 40
 PADDING = 20
 ROWS = COLS = (WIDTH - 4 * PADDING) // CELLSIZE
-pygame.init()
-win = pygame.display.set_mode((WIDTH, HEIGHT), pygame.NOFRAME)
 
 WHITE = (255, 255, 255)
 RED = (252, 91, 122)
@@ -14,217 +14,206 @@ BLUE = (78, 193, 246)
 GREEN = (0, 255, 0)
 BLACK = (12, 12, 12)
 
-font = pygame.font.SysFont('cursive', 25)
 
 class Cell:
-	def __init__(self, r, c):
-		self.r = r
-		self.c = c
-		self.index = self.r * ROWS + self.c
+    def __init__(self, row, col):
+        self.row = row
+        self.col = col
+        self.rect = pygame.Rect(
+            (
+                col * CELLSIZE + 2 * PADDING,
+                row * CELLSIZE + 3 * PADDING,
+                CELLSIZE,
+                CELLSIZE,
+            )
+        )
 
-		self.rect = pygame.Rect((self.c*CELLSIZE + 2*PADDING, self.r*CELLSIZE + 
-								3*PADDING, CELLSIZE, CELLSIZE))
-		self.left = self.rect.left
-		self.top = self.rect.top
-		self.right = self.rect.right
-		self.bottom = self.rect.bottom
-		self.edges = [
-					  [(self.left, self.top), (self.right, self.top)],
-					  [(self.right, self.top), (self.right, self.bottom)],
-					  [(self.right, self.bottom), (self.left, self.bottom)],
-					  [(self.left, self.bottom), (self.left, self.top)]
-					 ]
-		self.sides = [False, False, False, False]
-		self.winner = None
+    def draw(self, surface, rules):
+        owner = rules.claimed_boxes.get((self.row, self.col))
+        if owner:
+            color = GREEN if owner == "X" else RED
+            pygame.draw.rect(surface, color, self.rect)
+            font = pygame.font.SysFont("cursive", 25)
+            text = font.render(owner, True, WHITE)
+            surface.blit(
+                text,
+                (self.rect.centerx - 5, self.rect.centery - 7),
+            )
 
-	def checkwin(self, winner):
-		if not self.winner:
-			if self.sides == [True]*4:
-				self.winner = winner
-				if winner == 'X':
-					self.color = GREEN
-				else:
-					self.color = RED
-				self.text = font.render(self.winner, True, WHITE)
+        edges = (
+            (Direction.UP, (self.rect.left, self.rect.top), (self.rect.right, self.rect.top)),
+            (
+                Direction.RIGHT,
+                (self.rect.right, self.rect.top),
+                (self.rect.right, self.rect.bottom),
+            ),
+            (
+                Direction.DOWN,
+                (self.rect.right, self.rect.bottom),
+                (self.rect.left, self.rect.bottom),
+            ),
+            (
+                Direction.LEFT,
+                (self.rect.left, self.rect.bottom),
+                (self.rect.left, self.rect.top),
+            ),
+        )
+        for direction, start, end in edges:
+            if rules.has_edge(self.row, self.col, direction):
+                pygame.draw.line(surface, WHITE, start, end, 2)
 
-				return 1
-		return 0
 
-	def update(self, win):
-		if self.winner:
-			pygame.draw.rect(win, self.color, self.rect)
-			win.blit(self.text, (self.rect.centerx-5, self.rect.centery-7))
+class DotsAndBoxesGame:
+    """Pygame adapter that translates user events into rules-engine moves."""
 
-		for index, side in enumerate(self.sides):
-			if side:
-				pygame.draw.line(win, WHITE, (self.edges[index][0]),
-										(self.edges[index][1]), 2)
+    key_directions = {
+        pygame.K_UP: Direction.UP,
+        pygame.K_RIGHT: Direction.RIGHT,
+        pygame.K_DOWN: Direction.DOWN,
+        pygame.K_LEFT: Direction.LEFT,
+    }
 
-def create_cells():
-	cells = []
-	for r in range(ROWS):
-		for c in range(COLS):
-			cell = Cell(r, c)
-			cells.append(cell)
-	return cells
+    def __init__(self):
+        self.rules = GameState(ROWS, COLS)
+        self.cells = self._create_cells()
+        self.selected_cell = None
 
-def reset_cells():
-	pos = None
-	ccell = None
-	up = False
-	right = False
-	bottom = False
-	left = False
-	return pos, ccell, up, right, bottom, left
+    def _create_cells(self):
+        return [
+            Cell(row, col)
+            for row in range(ROWS)
+            for col in range(COLS)
+        ]
 
-def reset_score():
-	fillcount = 0
-	p1_score = 0
-	p2_score = 0
-	return fillcount, p1_score, p2_score
+    def reset(self):
+        self.rules.reset()
+        self.cells = self._create_cells()
+        self.selected_cell = None
 
-def reset_player():
-	turn = 0
-	players = ['X', 'O']
-	player = players[turn]
-	next_turn = False
-	return turn, players, player, next_turn
+    def handle_event(self, event):
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            self.selected_cell = self._cell_at(event.pos)
+            return None
 
-gameover = False
-cells = create_cells()
-pos, ccell, up, right, bottom, left = reset_cells()
-fillcount, p1_score, p2_score = reset_score()
-turn, players, player, next_turn = reset_player()
+        if event.type != pygame.KEYDOWN:
+            return None
 
-running = True
-while running:
-	win.fill(BLACK)
-	for event in pygame.event.get():
-		if event.type == pygame.QUIT:
-			running = False
+        if event.key in (pygame.K_q, pygame.K_ESCAPE):
+            return "quit"
+        if event.key == pygame.K_r:
+            self.reset()
+            return "restart"
+        if self.rules.game_over or self.selected_cell is None:
+            return None
 
-		if event.type == pygame.MOUSEBUTTONDOWN:
-			pos = event.pos
+        direction = self.key_directions.get(event.key)
+        if direction is None:
+            return None
+        row, col = self.selected_cell
+        return self.rules.apply_move(row, col, direction)
 
-		if event.type == pygame.MOUSEBUTTONUP:
-			pos = None
+    def _cell_at(self, position):
+        for cell in self.cells:
+            if cell.rect.collidepoint(position):
+                return cell.row, cell.col
+        return None
 
-		if event.type == pygame.KEYDOWN:
-			if event.key == pygame.K_q or event.key == pygame.K_ESCAPE:
-				running = False
+    def update(self):
+        """Keep the adapter event-driven; held keys never create extra moves."""
 
-			if event.key == pygame.K_r:
-				gameover = False
-				cells = create_cells()
-				pos, ccell, up, right, bottom, left = reset_cells()
-				fillcount, p1_score, p2_score = reset_score()
-				turn, players, player, next_turn = reset_player()
+    def draw(self, surface, font):
+        surface.fill(BLACK)
+        for row in range(ROWS + 1):
+            for col in range(COLS + 1):
+                pygame.draw.circle(
+                    surface,
+                    WHITE,
+                    (
+                        col * CELLSIZE + 2 * PADDING,
+                        row * CELLSIZE + 3 * PADDING,
+                    ),
+                    2,
+                )
 
-			if not gameover:
-				if event.key == pygame.K_UP:
-					up = True
-				if event.key == pygame.K_RIGHT:
-					right = True
-				if event.key == pygame.K_DOWN:
-					bottom = True
-				if event.key == pygame.K_LEFT:
-					left = True
+        for cell in self.cells:
+            cell.draw(surface, self.rules)
 
-		if event.type == pygame.KEYUP:
-			if event.key == pygame.K_UP:
-				up = False
-			if event.key == pygame.K_RIGHT:
-				right = False
-			if event.key == pygame.K_DOWN:
-				bottom = False
-			if event.key == pygame.K_LEFT:
-				left = False
+        if self.selected_cell is not None:
+            row, col = self.selected_cell
+            cell = self.cells[row * COLS + col]
+            if (row, col) not in self.rules.claimed_boxes:
+                pygame.draw.circle(
+                    surface,
+                    RED,
+                    (cell.rect.centerx, cell.rect.centery),
+                    2,
+                )
 
-	for r in range(ROWS+1):
-		for c in range(COLS+1):
-			pygame.draw.circle(win, WHITE, (c*CELLSIZE + 2*PADDING, r*CELLSIZE + 
-								3*PADDING), 2)
-	for cell in cells:
-		cell.update(win)
-		if pos and cell.rect.collidepoint(pos):
-			ccell = cell
+        scores = self.rules.scores
+        p1img = font.render(f"Player 1 : {scores['X']}", True, BLUE)
+        p1rect = p1img.get_rect()
+        p1rect.x, p1rect.y = 2 * PADDING, 15
 
-	if ccell:
-		index = ccell.index
-		if not ccell.winner:
-			pygame.draw.circle(win, RED, (ccell.rect.centerx, ccell.rect.centery), 2)
+        p2img = font.render(f"Player 2 : {scores['O']}", True, BLUE)
+        p2rect = p2img.get_rect()
+        p2rect.right, p2rect.y = WIDTH - 2 * PADDING, 15
 
-		if up and not ccell.sides[0]:
-			ccell.sides[0] = True
-			if index - ROWS >= 0:			
-				cells[index-ROWS].sides[2] = True
-				next_turn = True
-		if right and not ccell.sides[1]:
-			ccell.sides[1] = True
-			if (index + 1) % COLS > 0:
-				cells[index+1].sides[3] = True
-				next_turn = True
-		if bottom and not ccell.sides[2]:
-			ccell.sides[2] = True
-			if index + ROWS < len(cells):			
-				cells[index+ROWS].sides[0] = True
-				next_turn = True
-		if left and not ccell.sides[3]:
-			ccell.sides[3] = True
-			if (index % COLS) > 0:
-				cells[index-1].sides[1] = True
-				next_turn = True
-		
-		res = ccell.checkwin(player)
-		if res:
-			fillcount += res
-			if player == 'X':
-				p1_score += 1
-			else:
-				p2_score += 1
-			if fillcount == ROWS * COLS:
-				print(p1_score, p2_score)
-				gameover = True
+        surface.blit(p1img, p1rect)
+        surface.blit(p2img, p2rect)
+        active_player = self.rules.active_player
+        active_rect = p1rect if active_player == "X" else p2rect
+        pygame.draw.line(
+            surface,
+            BLUE,
+            (active_rect.x, active_rect.bottom + 2),
+            (active_rect.right, active_rect.bottom + 2),
+            1,
+        )
 
-		if next_turn:
-			turn = (turn + 1) % len(players)
-			player = players[turn]
-			next_turn = False
+        if self.rules.game_over:
+            rect = pygame.Rect((50, 100, WIDTH - 100, HEIGHT - 200))
+            pygame.draw.rect(surface, BLACK, rect)
+            pygame.draw.rect(surface, RED, rect, 2)
 
-	p1img = font.render(f'Player 1 : {p1_score}', True, BLUE)
-	p1rect = p1img.get_rect()
-	p1rect.x, p1rect.y = 2*PADDING, 15
+            over = font.render("Game Over", True, WHITE)
+            surface.blit(over, (rect.centerx - over.get_width() / 2, rect.y + 10))
 
-	p2img = font.render(f'Player 2 : {p2_score}', True, BLUE)
-	p2rect = p2img.get_rect()
-	p2rect.right, p2rect.y = WIDTH-2*PADDING, 15
+            winner = "draw" if self.rules.winner == "draw" else self.rules.winner
+            winner_text = "Draw" if winner == "draw" else f"Player {winner} Won"
+            winner_img = font.render(winner_text, True, GREEN)
+            surface.blit(
+                winner_img,
+                (rect.centerx - winner_img.get_width() / 2, rect.centery - 10),
+            )
 
-	win.blit(p1img, p1rect)
-	win.blit(p2img, p2rect)
-	if player == 'X':
-		pygame.draw.line(win, BLUE, (p1rect.x, p1rect.bottom+2), 
-							(p1rect.right, p1rect.bottom+2), 1)
-	else:
-		pygame.draw.line(win, BLUE, (p2rect.x, p2rect.bottom+2), 
-							(p2rect.right, p2rect.bottom+2), 1)
+            msgimg = font.render("Press r:restart, q:quit", True, RED)
+            surface.blit(
+                msgimg,
+                (rect.centerx - msgimg.get_width() / 2, rect.centery + 20),
+            )
 
-	if gameover:
-		rect = pygame.Rect((50, 100, WIDTH-100, HEIGHT-200))
-		pygame.draw.rect(win, BLACK, rect)
-		pygame.draw.rect(win, RED, rect, 2)
+        pygame.draw.rect(surface, WHITE, (0, 0, WIDTH, HEIGHT), 2, border_radius=10)
 
-		over = font.render('Game Over', True, WHITE)
-		win.blit(over, (rect.centerx-over.get_width()/2, rect.y + 10))
-		
-		winner = '1' if p1_score > p2_score else '2'
-		winner_img = font.render(f'Player {winner} Won', True, GREEN)
-		win.blit(winner_img, (rect.centerx-winner_img.get_width()/2, rect.centery- 10))
 
-		msg = 'Press r:restart, q:quit'
-		msgimg = font.render(msg, True, RED)
-		win.blit(msgimg, (rect.centerx-msgimg.get_width()/2, rect.centery + 20))
+def main():
+    pygame.init()
+    window = pygame.display.set_mode(SCREEN, pygame.NOFRAME)
+    font = pygame.font.SysFont("cursive", 25)
+    game = DotsAndBoxesGame()
+    running = True
 
-	pygame.draw.rect(win, WHITE, (0,0,WIDTH,HEIGHT),2, border_radius=10)
-	pygame.display.update()
+    while running:
+        for event in pygame.event.get():
+            result = game.handle_event(event)
+            if result == "quit":
+                running = False
 
-pygame.quit()
+        game.update()
+        game.draw(window, font)
+        pygame.display.update()
+
+    pygame.quit()
+
+
+if __name__ == "__main__":
+    main()
