@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# macOS metadata
+._*
+
+# Local AI assistant instructions and notes
+/AGENTS.md
+/docs/agents/

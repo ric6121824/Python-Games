@@ -7,6 +7,19 @@
 This repository contains a collection of small python games made by me using turtle, tkinter
 and pygame library.
 
+## Local development
+
+The repository uses one shared virtual environment at `.venv/` so all games can use the
+same installed packages. Create it from the repository root if it does not exist:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install pygame pytest
+```
+
+The environment and Python-generated cache files are ignored by Git.
+
 ## All the Games are listed here
 
 * ### [Aeroblasters](https://github.com/pyGuru123/Python-Games/tree/master/Aeroblasters)
