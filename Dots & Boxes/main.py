@@ -63,6 +63,16 @@ class Cell:
                 pygame.draw.line(surface, WHITE, start, end, 2)
 
 
+def result_text_for(winner):
+    if winner == "draw":
+        return "Draw"
+    if winner == "X":
+        return "Player 1 Won"
+    if winner == "O":
+        return "Player 2 Won"
+    return "Draw"
+
+
 class DotsAndBoxesGame:
     """Pygame adapter that translates user events into rules-engine moves."""
 
@@ -91,6 +101,9 @@ class DotsAndBoxesGame:
         self.selected_cell = None
 
     def handle_event(self, event):
+        if event.type == pygame.QUIT:
+            return "quit"
+
         if event.type == pygame.MOUSEBUTTONDOWN:
             self.selected_cell = self._cell_at(event.pos)
             return None
@@ -178,8 +191,7 @@ class DotsAndBoxesGame:
             over = font.render("Game Over", True, WHITE)
             surface.blit(over, (rect.centerx - over.get_width() / 2, rect.y + 10))
 
-            winner = "draw" if self.rules.winner == "draw" else self.rules.winner
-            winner_text = "Draw" if winner == "draw" else f"Player {winner} Won"
+            winner_text = result_text_for(self.rules.winner)
             winner_img = font.render(winner_text, True, GREEN)
             surface.blit(
                 winner_img,

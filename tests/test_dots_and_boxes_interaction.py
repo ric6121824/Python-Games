@@ -32,6 +32,7 @@ sys.modules["pygame"] = SimpleNamespace(
     KEYDOWN=2,
     KEYUP=3,
     MOUSEBUTTONDOWN=5,
+    QUIT=12,
     Rect=FakeRect,
 )
 
@@ -121,3 +122,12 @@ class DotsAndBoxesInteractionTests(unittest.TestCase):
         self.assertEqual(restart, "restart")
         self.assertFalse(self.game.rules.game_over)
         self.assertEqual(self.game.rules.scores, {"X": 0, "O": 0})
+
+    def test_window_close_event_ends_the_game_loop(self):
+        result = self.game.handle_event(SimpleNamespace(type=main.pygame.QUIT))
+        self.assertEqual(result, "quit")
+
+    def test_result_text_maps_players_and_draw_correctly(self):
+        self.assertEqual(main.result_text_for("X"), "Player 1 Won")
+        self.assertEqual(main.result_text_for("O"), "Player 2 Won")
+        self.assertEqual(main.result_text_for("draw"), "Draw")
