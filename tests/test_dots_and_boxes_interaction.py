@@ -11,6 +11,8 @@ sys.path.insert(0, str(GAME_DIR))
 class FakeRect:
     def __init__(self, values):
         self.left, self.top, width, height = values
+        self.x = self.left
+        self.y = self.top
         self.right = self.left + width
         self.bottom = self.top + height
         self.centerx = self.left + width // 2
@@ -19,6 +21,48 @@ class FakeRect:
     def collidepoint(self, position):
         x, y = position
         return self.left <= x < self.right and self.top <= y < self.bottom
+
+
+class FakeImage:
+    def __init__(self, text):
+        self.text = text
+
+    def get_rect(self):
+        return FakeRect((0, 0, len(self.text) * 10, 20))
+
+    def get_width(self):
+        return len(self.text) * 10
+
+
+class FakeFont:
+    def __init__(self):
+        self.rendered = []
+
+    def render(self, text, antialias, color):
+        self.rendered.append(text)
+        return FakeImage(text)
+
+
+class FakeSurface:
+    def fill(self, color):
+        pass
+
+    def blit(self, image, position):
+        pass
+
+
+class FakeDraw:
+    def circle(self, surface, color, position, radius):
+        pass
+
+    def line(self, surface, color, start, end, width):
+        pass
+
+    def rect(self, surface, color, rect, width=0, border_radius=0):
+        pass
+
+
+fake_font = FakeFont()
 
 
 sys.modules["pygame"] = SimpleNamespace(
@@ -34,6 +78,8 @@ sys.modules["pygame"] = SimpleNamespace(
     MOUSEBUTTONDOWN=5,
     QUIT=12,
     Rect=FakeRect,
+    draw=FakeDraw(),
+    font=SimpleNamespace(SysFont=lambda name, size: fake_font),
 )
 
 import main  # noqa: E402
@@ -131,3 +177,17 @@ class DotsAndBoxesInteractionTests(unittest.TestCase):
         self.assertEqual(main.result_text_for("X"), "Player 1 Won")
         self.assertEqual(main.result_text_for("O"), "Player 2 Won")
         self.assertEqual(main.result_text_for("draw"), "Draw")
+
+    def test_draw_renders_completed_game_and_final_result(self):
+        self.game.rules = main.GameState(1, 1)
+        self.game.cells = [main.Cell(0, 0)]
+        for direction in main.Direction:
+            self.game.rules.apply_move(0, 0, direction)
+
+        fake_font.rendered.clear()
+        font = FakeFont()
+        self.game.draw(FakeSurface(), font)
+
+        self.assertIn("O", fake_font.rendered)
+        self.assertIn("Game Over", font.rendered)
+        self.assertIn("Player 2 Won", font.rendered)
