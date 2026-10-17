@@ -4,11 +4,14 @@
 # Date : Thursday, 28 October, 2021
 
 import random
+from pathlib import Path
+
 import pygame
 from objects import Rect, generate_boxes, create_board
 from logic import isBoardFull, check_win
 
 pygame.init()
+GAME_DIR = Path(__file__).resolve().parent
 SCREEN = WIDTH, HEIGHT = (288, 512)
 
 info = pygame.display.Info()
@@ -33,13 +36,13 @@ ORANGE = (208, 91, 3)
 
 # IMAGES *********************************************************************
 
-bg1 = pygame.image.load('Assets/bg1.png')
+bg1 = pygame.image.load(str(GAME_DIR / 'Assets' / 'bg1.png'))
 bg1 = pygame.transform.scale(bg1, (WIDTH, HEIGHT-10))
 
-bg2 = pygame.image.load('Assets/bg2.png')
+bg2 = pygame.image.load(str(GAME_DIR / 'Assets' / 'bg2.png'))
 bg2 = pygame.transform.scale(bg2, (WIDTH, HEIGHT-10))
 
-replay_image = pygame.image.load('Assets/replay.png')
+replay_image = pygame.image.load(str(GAME_DIR / 'Assets' / 'replay.png'))
 replay_image = pygame.transform.scale(replay_image, (36, 36))
 replay_rect = replay_image.get_rect()
 replay_rect.x = WIDTH - 110
@@ -58,9 +61,9 @@ text = players[current_player]
 scoreX = 0
 scoreO = 0
 
-font1 = pygame.font.Font('Fonts/PAPYRUS.ttf', 17)
-font2 = pygame.font.Font('Fonts/CHILLER.ttf', 30)
-font3 = pygame.font.Font('Fonts/CHILLER.ttf', 40)
+font1 = pygame.font.Font(str(GAME_DIR / 'Fonts' / 'PAPYRUS.ttf'), 17)
+font2 = pygame.font.Font(str(GAME_DIR / 'Fonts' / 'CHILLER.ttf'), 30)
+font3 = pygame.font.Font(str(GAME_DIR / 'Fonts' / 'CHILLER.ttf'), 40)
 
 tic_tac_toe = font2.render('Tic Tac Toe', True, WHITE)
 

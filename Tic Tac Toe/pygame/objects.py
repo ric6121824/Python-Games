@@ -1,4 +1,8 @@
+from pathlib import Path
+
 import pygame
+
+GAME_DIR = Path(__file__).resolve().parent
 
 class Rect():
 	def __init__(self, x, y, index):
@@ -9,7 +13,7 @@ class Rect():
 		self.bgcolor = (32, 33, 36)
 		self.color = (255, 255, 255)
 		self.text = ''
-		self.font = pygame.font.Font('Fonts/PAPYRUS.ttf', 25)
+		self.font = pygame.font.Font(str(GAME_DIR / 'Fonts' / 'PAPYRUS.ttf'), 25)
 		self.image = self.font.render(self.text, True, self.color)
 
 	def update(self, win):
