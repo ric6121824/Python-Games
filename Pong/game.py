@@ -1,5 +1,12 @@
 import turtle
-import winsound
+from pathlib import Path
+
+try:
+	import winsound
+except ImportError:
+	winsound = None
+
+GAME_DIR = Path(__file__).resolve().parent
 
 # Window properties
 win = turtle.Screen()
@@ -102,8 +109,11 @@ def write():
 
 
 def playMusic(music):
+	if winsound is None:
+		return
+
 	try:
-		winsound.PlaySound(music, winsound.SND_ASYNC)
+		winsound.PlaySound(str(GAME_DIR / music), winsound.SND_ASYNC)
 	except FileNotFoundError:
 		print('The required music file does not exist.')
 	except:
