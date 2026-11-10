@@ -1,5 +1,7 @@
 # Spec: Scroll the Arcade Hub game list with a Mac trackpad
 
+Status: Resolved — user confirmed the fix on 2026-11-10.
+
 ## Problem Statement
 
 On the affected MacBook Air, a two-finger trackpad gesture does not move the Arcade Hub game list. The list is taller than the window and the vertical scrollbar works, but the user cannot scroll naturally while pointing at the list, a game card, or its controls. The same project scrolls on another device. Previous changes to wheel-delta handling and widget bindings passed synthetic event checks without fixing the physical gesture.
@@ -52,14 +54,94 @@ The user can launch the Arcade Hub on the affected Mac and scroll the game list 
 
 ## Further Notes
 
-- The ticket remains open until the user confirms the real gesture works on the affected Mac.
+- The user confirmed that the real gesture works on the affected Mac on
+  2026-11-10. See the verification and resolution below.
 - Automated coverage now verifies that wheel events from another window do not
   move the list and that refreshed game controls still scroll it. These checks
   do not establish physical trackpad support.
-- Physical event-path observation over the canvas, cards, labels, and buttons,
-  followed by verification through `arcade_hub.command`, is still required.
-  Record the runtime and Tk version used; do not treat synthetic events as a
-  substitute.
+- Physical verification used `arcade_hub.command` with Python 3.14.10 and
+  Tk 9.1.0 / Aqua. The user confirmation, not synthetic events alone, closes
+  this ticket.
 - Prior investigation measured a 929 × 483 viewport and a 929 × 4296 scroll region. Direct canvas scrolling worked, as did synthetic positive and negative wheel events on child widgets.
 - The investigated environments included Xcode Python 3.9.6 with Tk 8.5.9 and a project environment using Python 3.14.10 with Tk 9.1. The launcher selects an available runtime, so record the runtime used for the final physical check.
 - The earlier sign-based delta change and recursive widget bindings are already present. Repeat them only if physical-event evidence shows they need adjustment.
+
+## Previous diagnostic findings
+
+The diagnostic launcher was run exactly as follows from the repository root:
+
+```bash
+ARCADE_HUB_DEBUG_SCROLL=1 ./arcade_hub.command
+```
+
+The persistent log confirmed that the visible hub was the diagnostic process:
+
+```text
+selected python: /Users/ping-chung/Documents/GitHub/Python-Games/.venv/bin/python
+script: /Users/ping-chung/Documents/GitHub/Python-Games/arcade_hub.py
+working directory: /Users/ping-chung/Documents/GitHub/Python-Games
+arcade hub diagnostic session started pid=40000 ... tkinter=9.1.0
+```
+
+After performing a real two-finger gesture, the log contained no
+`scroll event:` lines. Synthetic events still produce those lines, so the
+diagnostic binding and file logging are functional.
+
+This rules out:
+
+- the wrong Python executable being used;
+- the wrong `arcade_hub.py` being launched;
+- an incorrect working directory;
+- a missing diagnostic environment variable;
+- a missing canvas scroll region;
+- a broken `Canvas.yview_scroll()` callback;
+- the prior delta-rounding issue;
+- ordinary Tk wheel bindings as the immediate fix.
+
+That observation only established that the gesture did not produce any of the
+four monitored wheel events. Both the handler and logger omitted Tk's separate
+`<TouchpadScroll>` event, so the empty log did not establish a native input
+delivery failure.
+
+## Trackpad-event fix
+
+- Added a list-scoped `<TouchpadScroll>` handler without changing the existing
+  mouse-wheel bindings, scrollbar, or game controls. Older Tk runtimes that do
+  not recognize this event retain their existing wheel handling.
+- Decode the signed vertical component from the low 16 bits of Tk's packed
+  delta. Apply it as pixel movement, preserving magnitude and ignoring
+  horizontal-only input. Taking the sign of the whole packed delta would give
+  incorrect directions for mixed-axis gestures.
+- Include supported trackpad events, the event sequence, and the resulting
+  canvas position in diagnostic logging. Logging is scoped to the hub window.
+  Startup logging now records the actual Tk package version and window system.
+- The focused regression test failed before the fix because the canvas did not
+  move. All five scrolling tests now pass on Python 3.14.10 / Tk 9.1.0 / Aqua,
+  including both directions over cards, labels, and buttons before and after
+  Refresh Games, horizontal-only input, other-window isolation, and simulated
+  compatibility with older Tk. These remain generated-event checks.
+
+Physical diagnostic observation through the normal launcher:
+
+```text
+launcher pid: 46504
+selected python: /Users/ping-chung/Documents/GitHub/Python-Games/.venv/bin/python
+arcade hub diagnostic session started pid=46504 ... tkinter=9.1.0 windowingsystem=aqua
+scroll event: sequence=<TouchpadScroll> type=39 ... delta=65535 ... yview=(0.00023277467411545624, 0.11266294227188083)
+```
+
+The newly launched process received 45 physical trackpad events over the
+content and game-card frames. All had downward vertical deltas; the recorded
+canvas position increased 39 times. No synthetic events were sent to this
+launcher process. This trace confirmed the missing event path and actual
+downward movement; the user's subsequent confirmation completed physical
+acceptance.
+
+## Verification and resolution
+
+On 2026-11-10, after testing the updated hub through the normal Mac launcher,
+the user confirmed: "fixed confirmed." The issue is resolved.
+
+For future regressions, use `ARCADE_HUB_DEBUG_SCROLL=1 ./arcade_hub.command` to
+capture the event sequence and canvas position. Preserve the working Tk canvas;
+the captured `<TouchpadScroll>` events do not support replacing the toolkit.

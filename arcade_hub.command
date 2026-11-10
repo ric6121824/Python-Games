@@ -28,4 +28,14 @@ if [ -z "$PYTHON" ]; then
   exit 1
 fi
 
+if [ "${ARCADE_HUB_DEBUG_SCROLL:-0}" = "1" ]; then
+  {
+    echo "launcher diagnostic session started"
+    echo "launcher pid: $$"
+    echo "selected python: $PYTHON"
+    echo "script: $SCRIPT_DIR/arcade_hub.py"
+    echo "working directory: $PWD"
+  } >> "$SCRIPT_DIR/arcade_hub_scroll.log"
+fi
+
 exec "$PYTHON" "$SCRIPT_DIR/arcade_hub.py"

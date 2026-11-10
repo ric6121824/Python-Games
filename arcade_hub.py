@@ -18,6 +18,8 @@ COMMON_ENTRYPOINTS = [
 ]
 SKIP_NAMES = {".git", ".venv", "__pycache__", ".idea", ".vscode"}
 SCROLL_EVENTS = ("<MouseWheel>", "<Shift-MouseWheel>", "<Button-4>", "<Button-5>")
+DEBUG_SCROLL = os.environ.get("ARCADE_HUB_DEBUG_SCROLL") == "1"
+DEBUG_SCROLL_LOG = ROOT_DIR / "arcade_hub_scroll.log"
 
 
 def discover_games(base_dir: Path):
@@ -119,6 +121,15 @@ class ArcadeHubApp:
         trace_path = os.environ.get("ARCADE_HUB_SCROLL_TRACE")
         self._scroll_trace = open(trace_path, "w", buffering=1) if trace_path else None
         self._scroll_bindtag = f"ArcadeHubScroll-{id(self)}"
+        if DEBUG_SCROLL:
+            with DEBUG_SCROLL_LOG.open("a", encoding="utf-8") as log:
+                log.write(
+                    "arcade hub diagnostic session started"
+                    f" pid={os.getpid()}"
+                    f" python={sys.executable}"
+                    f" tkinter={root.tk.call('package', 'provide', 'Tk')}"
+                    f" windowingsystem={root.tk.call('tk', 'windowingsystem')}\n"
+                )
         self.root.title("Python Arcade Hub")
         self.root.configure(background="#f3f4f6")
         self.root.geometry("980x640")
@@ -160,6 +171,8 @@ class ArcadeHubApp:
         self.canvas_window = self.canvas.create_window((0, 0), window=self.content, anchor="nw")
         self.content.bind("<Configure>", self._on_frame_configure)
         self._bind_scroll_events()
+        if DEBUG_SCROLL:
+            self._bind_scroll_debug_events()
         self.refresh_games()
         if self._scroll_trace:
             self._scroll_trace.write(
@@ -200,6 +213,55 @@ class ArcadeHubApp:
                 self.canvas.yview_scroll(direction, "units")
         self._trace_scroll_event(event, "handler_after")
 
+    def _on_touchpad_scroll(self, event):
+        if not self._pointer_over_canvas(event):
+            return
+
+        # Tk packs signed horizontal/vertical pixel deltas into the high/low
+        # 16 bits. The sign of the packed integer is not the vertical direction.
+        delta_y = event.delta & 0xffff
+        if delta_y >= 0x8000:
+            delta_y -= 0x10000
+        if not delta_y:
+            return
+
+        region = self.canvas.bbox("all")
+        if region:
+            height = region[3] - region[1]
+            if height > 0:
+                position = self.canvas.yview()[0]
+                self.canvas.yview_moveto(position - delta_y / height)
+
+    def _log_scroll_event(self, event, sequence):
+        message = (
+            "scroll event:"
+            f" sequence={sequence}"
+            f" type={getattr(event, 'type', None)}"
+            f" num={getattr(event, 'num', None)}"
+            f" delta={getattr(event, 'delta', None)}"
+            f" state={getattr(event, 'state', None)}"
+            f" widget={getattr(event, 'widget', None)}"
+            f" x={getattr(event, 'x', None)}"
+            f" y={getattr(event, 'y', None)}"
+            f" x_root={getattr(event, 'x_root', None)}"
+            f" y_root={getattr(event, 'y_root', None)}"
+            f" yview={self.canvas.yview()}"
+        )
+        print(message, flush=True)
+        try:
+            with DEBUG_SCROLL_LOG.open("a", encoding="utf-8") as log:
+                log.write(message + "\n")
+        except OSError as exc:
+            print(f"unable to write scroll log: {exc}", flush=True)
+
+    def _bind_scroll_debug_events(self):
+        for sequence in self._scroll_events:
+            self.root.bind(
+                sequence,
+                lambda event, sequence=sequence: self._log_scroll_event(event, sequence),
+                add="+",
+            )
+
     def _pointer_over_canvas(self, event):
         try:
             x_root = event.x_root
@@ -216,8 +278,18 @@ class ArcadeHubApp:
         )
 
     def _bind_scroll_events(self):
+        self._scroll_events = list(SCROLL_EVENTS)
         for sequence in SCROLL_EVENTS:
             self.root.bind_class(self._scroll_bindtag, sequence, self._on_mousewheel, add="+")
+        try:
+            self.root.bind_class(
+                self._scroll_bindtag, "<TouchpadScroll>", self._on_touchpad_scroll, add="+"
+            )
+        except tk.TclError:
+            # Older Tk runtimes only provide the wheel events above.
+            pass
+        else:
+            self._scroll_events.append("<TouchpadScroll>")
         self._apply_scroll_bindtag(self.canvas)
 
     def _apply_scroll_bindtag(self, widget):
