@@ -17,6 +17,7 @@ COMMON_ENTRYPOINTS = [
     "main_game.py",
 ]
 SKIP_NAMES = {".git", ".venv", "__pycache__", ".idea", ".vscode"}
+SCROLL_EVENTS = ("<MouseWheel>", "<Shift-MouseWheel>", "<Button-4>", "<Button-5>")
 
 
 def discover_games(base_dir: Path):
@@ -115,6 +116,7 @@ def open_readme(readme_path: Path):
 class ArcadeHubApp:
     def __init__(self, root):
         self.root = root
+        self._scroll_bindtag = f"ArcadeHubScroll-{id(self)}"
         self.root.title("Python Arcade Hub")
         self.root.configure(background="#f3f4f6")
         self.root.geometry("980x640")
@@ -155,8 +157,8 @@ class ArcadeHubApp:
         self.content = tk.Frame(self.canvas, bg="#f3f4f6")
         self.canvas_window = self.canvas.create_window((0, 0), window=self.content, anchor="nw")
         self.content.bind("<Configure>", self._on_frame_configure)
-        self.refresh_games()
         self._bind_scroll_events()
+        self.refresh_games()
 
     def _on_canvas_resize(self, event):
         if self.canvas_window:
@@ -193,8 +195,16 @@ class ArcadeHubApp:
         )
 
     def _bind_scroll_events(self):
-        for sequence in ("<MouseWheel>", "<Shift-MouseWheel>", "<Button-4>", "<Button-5>"):
-            self.root.bind_all(sequence, self._on_mousewheel, add="+")
+        for sequence in SCROLL_EVENTS:
+            self.root.bind_class(self._scroll_bindtag, sequence, self._on_mousewheel, add="+")
+        self._apply_scroll_bindtag(self.canvas)
+
+    def _apply_scroll_bindtag(self, widget):
+        tags = widget.bindtags()
+        if self._scroll_bindtag not in tags:
+            widget.bindtags((self._scroll_bindtag, *tags))
+        for child in widget.winfo_children():
+            self._apply_scroll_bindtag(child)
 
     def _on_frame_configure(self, event):
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
@@ -203,6 +213,7 @@ class ArcadeHubApp:
     def refresh_games(self):
         for widget in self.content.winfo_children():
             widget.destroy()
+        self._apply_scroll_bindtag(self.content)
 
         games = discover_games(ROOT_DIR)
         if not games:
@@ -242,6 +253,8 @@ class ArcadeHubApp:
             if index < len(games) - 1:
                 separator = tk.Frame(self.content, height=1, bg="#e5e7eb")
                 separator.pack(fill="x", pady=(0, 6))
+
+            self._apply_scroll_bindtag(card)
 
     def launch_selected(self, game):
         if launch_game(game["script"], game["path"]):
