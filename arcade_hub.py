@@ -116,6 +116,8 @@ def open_readme(readme_path: Path):
 class ArcadeHubApp:
     def __init__(self, root):
         self.root = root
+        trace_path = os.environ.get("ARCADE_HUB_SCROLL_TRACE")
+        self._scroll_trace = open(trace_path, "w", buffering=1) if trace_path else None
         self._scroll_bindtag = f"ArcadeHubScroll-{id(self)}"
         self.root.title("Python Arcade Hub")
         self.root.configure(background="#f3f4f6")
@@ -159,12 +161,30 @@ class ArcadeHubApp:
         self.content.bind("<Configure>", self._on_frame_configure)
         self._bind_scroll_events()
         self.refresh_games()
+        if self._scroll_trace:
+            self._scroll_trace.write(
+                f"python={sys.version.split()[0]} tk={root.tk.call('info', 'patchlevel')} "
+                f"windowing={root.tk.call('tk', 'windowingsystem')}\n"
+            )
+            for sequence in SCROLL_EVENTS:
+                root.bind_all(sequence, self._trace_scroll_event, add="+")
+
+    def _trace_scroll_event(self, event, source="all"):
+        if self._scroll_trace:
+            self._scroll_trace.write(
+                f"source={source} type={event.type} num={getattr(event, 'num', None)} "
+                f"delta={getattr(event, 'delta', None)} state={event.state} "
+                f"widget={event.widget} x={event.x} y={event.y} "
+                f"root=({event.x_root},{event.y_root}) "
+                f"view={self.canvas.yview()}\n"
+            )
 
     def _on_canvas_resize(self, event):
         if self.canvas_window:
             self.canvas.itemconfig(self.canvas_window, width=event.width)
 
     def _on_mousewheel(self, event):
+        self._trace_scroll_event(event, "handler_before")
         if not self._pointer_over_canvas(event):
             return
 
@@ -178,6 +198,7 @@ class ArcadeHubApp:
             if delta:
                 direction = -1 if delta > 0 else 1
                 self.canvas.yview_scroll(direction, "units")
+        self._trace_scroll_event(event, "handler_after")
 
     def _pointer_over_canvas(self, event):
         try:
