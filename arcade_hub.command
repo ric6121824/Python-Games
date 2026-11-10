@@ -1,9 +1,11 @@
 #!/bin/bash
-cd "$(dirname "$0")"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR"
 export TK_SILENCE_DEPRECATION=1
 
 PYTHON=""
 for candidate in \
+  "$SCRIPT_DIR/.venv/bin/python" \
   "/opt/homebrew/bin/python3" \
   "/usr/local/bin/python3" \
   "/Applications/Xcode.app/Contents/Developer/usr/bin/python3"; do
@@ -20,9 +22,10 @@ done
 
 if [ -z "$PYTHON" ]; then
   echo "No working GUI runtime found." >&2
-  echo "Install Tk/Pygame with:" >&2
-  echo "  /Applications/Xcode.app/Contents/Developer/usr/bin/python3 -m pip install pygame" >&2
+  echo "Create the repository environment with:" >&2
+  echo "  /opt/homebrew/bin/python3.14 -m venv .venv" >&2
+  echo "  .venv/bin/python -m pip install pygame" >&2
   exit 1
 fi
 
-exec "$PYTHON" "$(dirname "$0")/arcade_hub.py"
+exec "$PYTHON" "$SCRIPT_DIR/arcade_hub.py"
