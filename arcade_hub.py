@@ -156,13 +156,16 @@ class ArcadeHubApp:
         self.canvas_window = self.canvas.create_window((0, 0), window=self.content, anchor="nw")
         self.content.bind("<Configure>", self._on_frame_configure)
         self.refresh_games()
-        self._bind_scroll_events(root)
+        self._bind_scroll_events()
 
     def _on_canvas_resize(self, event):
         if self.canvas_window:
             self.canvas.itemconfig(self.canvas_window, width=event.width)
 
     def _on_mousewheel(self, event):
+        if not self._pointer_over_canvas(event):
+            return
+
         event_num = getattr(event, "num", None)
         if event_num == 4:
             self.canvas.yview_scroll(-1, "units")
@@ -174,11 +177,24 @@ class ArcadeHubApp:
                 direction = -1 if delta > 0 else 1
                 self.canvas.yview_scroll(direction, "units")
 
-    def _bind_scroll_events(self, widget):
+    def _pointer_over_canvas(self, event):
+        try:
+            x_root = event.x_root
+            y_root = event.y_root
+        except AttributeError:
+            x_root = self.root.winfo_pointerx()
+            y_root = self.root.winfo_pointery()
+
+        canvas_x = self.canvas.winfo_rootx()
+        canvas_y = self.canvas.winfo_rooty()
+        return (
+            canvas_x <= x_root < canvas_x + self.canvas.winfo_width()
+            and canvas_y <= y_root < canvas_y + self.canvas.winfo_height()
+        )
+
+    def _bind_scroll_events(self):
         for sequence in ("<MouseWheel>", "<Shift-MouseWheel>", "<Button-4>", "<Button-5>"):
-            widget.bind(sequence, self._on_mousewheel, add="+")
-        for child in widget.winfo_children():
-            self._bind_scroll_events(child)
+            self.root.bind_all(sequence, self._on_mousewheel, add="+")
 
     def _on_frame_configure(self, event):
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
@@ -226,8 +242,6 @@ class ArcadeHubApp:
             if index < len(games) - 1:
                 separator = tk.Frame(self.content, height=1, bg="#e5e7eb")
                 separator.pack(fill="x", pady=(0, 6))
-
-        self._bind_scroll_events(self.content)
 
     def launch_selected(self, game):
         if launch_game(game["script"], game["path"]):
